@@ -96,8 +96,8 @@ public class HomeRedirectService extends AccessibilityService {
             return;
         }
         if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
-        // Our own cover window is not a screen change.
-        if (getPackageName().contentEquals(pkg) && !cls.toString().endsWith(".MainActivity")) return;
+        // Our own cover window is not a screen change; our activities are.
+        if (getPackageName().contentEquals(pkg) && !cls.toString().endsWith("Activity")) return;
         for (String app : SETTINGS_APPS) if (pkg.toString().startsWith(app)) settingsSeenAt = now;
         handler.removeCallbacks(redirect);
         handler.removeCallbacks(retry);

@@ -1,8 +1,32 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Portuguese greeting. Other strings fall back to res/values/strings.xml. -->
+<!-- Portuguese greeting and Settings screen. Other strings fall back to res/values/strings.xml. -->
 <resources>
     <string name="good_morning">Bom dia</string>
     <string name="good_afternoon">Boa tarde</string>
     <string name="good_evening">Boa noite</string>
     <string name="good_night">Boa noite</string>
+    <string name="settings_eyebrow">Fire TV</string>
+    <string name="settings_title">Configurações</string>
+    <string name="set_network">Rede</string>
+    <string name="set_network_sub">Wi-Fi e Ethernet</string>
+    <string name="set_apps">Aplicativos</string>
+    <string name="set_apps_sub">Gerenciar apps instalados</string>
+    <string name="set_remotes">Bluetooth</string>
+    <string name="set_remotes_sub">Controles e acessórios</string>
+    <string name="set_device">Meu Fire TV</string>
+    <string name="set_device_sub">Sobre, atualizações, dev</string>
+    <string name="set_accessibility">Acessibilidade</string>
+    <string name="set_accessibility_sub">Legendas, VoiceView</string>
+    <string name="set_display">Tela e sons</string>
+    <string name="set_display_sub">Pela tela da Amazon</string>
+    <string name="set_preferences">Preferências</string>
+    <string name="set_preferences_sub">Pela tela da Amazon</string>
+    <string name="set_account">Conta</string>
+    <string name="set_account_sub">Pela tela da Amazon</string>
+    <string name="use_amazon_home">Usar tela inicial da Amazon</string>
+    <string name="use_this_home">Usar esta tela inicial</string>
+    <string name="set_home">Tela inicial</string>
+    <string name="set_home_on_sub">Atual: este launcher</string>
+    <string name="set_home_off_sub">Atual: a da Amazon</string>
+    <string name="redirect_needs_permission">Precisa de uma configuração única pelo computador.</string>
 </resources>

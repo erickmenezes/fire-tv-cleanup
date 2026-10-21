@@ -141,6 +141,10 @@ things behave differently:
   while its settings cards are on it, including when you come back from a settings page. Pressing
   Home there only moves focus to Amazon's home tab, so the redirect watches focus changes and the
   settings cards to notice that you left.
+- **The launcher has its own Settings screen.** The Settings button opens a grid of cards. Network,
+  Applications, Bluetooth, My Fire TV and Accessibility open their Fire OS screens directly, without
+  Amazon's home screen. Display & Sounds, Preferences and Account need a permission only Amazon's
+  apps hold, so those cards open Amazon's settings grid. The last card switches the Home redirect.
 - **A stick has no inputs.** Set `show_inputs` to `false` in
   [`config.xml`](launcher/app/src/main/res/values/config.xml) to hide the Inputs button.
 - **One more protected package.** Fire OS 7 also refuses to disable `com.amazon.device.logmanager`.

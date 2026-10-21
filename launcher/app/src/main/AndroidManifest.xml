@@ -32,6 +32,13 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|keyboard|keyboardHidden|uiMode"
+            android:screenOrientation="landscape" />
+
         <!-- Screensaver: the Manhattan photos with a slow zoom and a clock. Selected over adb, see the class. -->
         <service
             android:name=".PhotoDream"

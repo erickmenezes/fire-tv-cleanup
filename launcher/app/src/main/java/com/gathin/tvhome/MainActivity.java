@@ -191,7 +191,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int firstPill = showInputs ? R.id.btnInputs : R.id.btnWifi;
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> open(new Intent(Settings.ACTION_WIFI_SETTINGS)));
-        btnSettings.setOnClickListener(v -> open(new Intent(Settings.ACTION_SETTINGS)));
+        btnSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         btnSettings.setOnLongClickListener(v -> {
             showHomeScreenMenu(v);
             return true;
