@@ -127,6 +127,24 @@ How it differs from Android TV:
 - **AirPlay has no screen of its own.** The AirPlay tile opens nothing, and casting from an iPhone
   works anyway.
 
+### Fire OS 7
+
+Also tested on a Fire TV Stick (Fire OS 7.7, Android 9, model AFTSS). The setup is the same; these
+things behave differently:
+
+- **Home takes about 5 seconds.** Android 9 holds back activity starts from background apps for
+  5 s after Home, and only system callers skip that. The redirect retries until the launcher opens,
+  and meanwhile covers Amazon's home screen with the launcher's background photo, so Amazon's
+  screen only flashes for about a second. Fire OS offers no way around the wait: it doesn't pass
+  Home to accessibility services, and it refuses adb connections from apps on the device itself.
+- **Settings is a tab of Amazon's home screen.** The redirect leaves Amazon's home screen alone
+  while its settings cards are on it, including when you come back from a settings page. Pressing
+  Home there only moves focus to Amazon's home tab, so the redirect watches focus changes and the
+  settings cards to notice that you left.
+- **A stick has no inputs.** Set `show_inputs` to `false` in
+  [`config.xml`](launcher/app/src/main/res/values/config.xml) to hide the Inputs button.
+- **One more protected package.** Fire OS 7 also refuses to disable `com.amazon.device.logmanager`.
+
 ## Supported TVs
 
 Android TV and Google TV: Xiaomi/Redmi, TCL, Hisense, Sony, OnePlus, Realme, Nvidia Shield and most

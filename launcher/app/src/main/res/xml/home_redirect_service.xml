@@ -1,9 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Window changes from all apps: needed to cancel a redirect when something else opens over Amazon's home
-     screen. Reads no screen content. -->
+     screen. Focus changes and window content: on Fire OS 7, Settings lives inside Amazon's home screen, and the
+     only way to tell it apart from the home tab is whether Amazon's settings cards are on screen. Content is
+     only looked up by that one view id while Amazon's home screen is showing. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeWindowStateChanged"
+    android:accessibilityEventTypes="typeWindowStateChanged|typeViewFocused"
     android:accessibilityFeedbackType="feedbackGeneric"
+    android:accessibilityFlags="flagReportViewIds"
     android:notificationTimeout="0"
-    android:canRetrieveWindowContent="false"
+    android:canRetrieveWindowContent="true"
     android:description="@string/home_redirect_description" />
