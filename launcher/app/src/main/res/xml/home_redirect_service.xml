@@ -2,11 +2,13 @@
 <!-- Window changes from all apps: needed to cancel a redirect when something else opens over Amazon's home
      screen. Focus changes and window content: on Fire OS 7, Settings lives inside Amazon's home screen, and the
      only way to tell it apart from the home tab is whether Amazon's settings cards are on screen. Content is
-     only looked up by that one view id while Amazon's home screen is showing. -->
+     only looked up while Amazon's home screen is showing: that view id, and this launcher's own tile, which is
+     clicked to open it. Key events: the D-pad and OK are held back while the cover hides Amazon's home screen. -->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
     android:accessibilityEventTypes="typeWindowStateChanged|typeViewFocused"
     android:accessibilityFeedbackType="feedbackGeneric"
-    android:accessibilityFlags="flagReportViewIds"
+    android:accessibilityFlags="flagReportViewIds|flagRequestFilterKeyEvents"
+    android:canRequestFilterKeyEvents="true"
     android:notificationTimeout="0"
     android:canRetrieveWindowContent="true"
     android:description="@string/home_redirect_description" />

@@ -132,11 +132,14 @@ How it differs from Android TV:
 Also tested on a Fire TV Stick (Fire OS 7.7, Android 9, model AFTSS). The setup is the same; these
 things behave differently:
 
-- **Home takes about 5 seconds.** Android 9 holds back activity starts from background apps for
-  5 s after Home, and only system callers skip that. The redirect retries until the launcher opens,
-  and meanwhile covers Amazon's home screen with the launcher's background photo. Fire OS offers no
-  way around the wait: it doesn't pass Home to accessibility services, and it refuses adb
-  connections from apps on the device itself.
+- **Home takes about 2 seconds.** Android 9 holds back activity starts from background apps for
+  5 s after Home, but not starts by the app in front, which after Home is Amazon's launcher. So the
+  redirect clicks the launcher's own tile ("My Home", "Meu Início" in Portuguese) in Amazon's apps
+  row, and Amazon opens it. The tile has to be in that row: Apps → highlight My Home → Menu → Move
+  to front. Amazon only lists the launcher after a fresh install, so uninstall it first if it was
+  installed before this. Without the tile, the redirect starts the launcher itself after the 5 s.
+  Either way the launcher's background photo covers Amazon's screen, and the D-pad and OK are held
+  back meanwhile. Idea from [andrewsaad/fire-tv-cleanup](https://github.com/andrewsaad/fire-tv-cleanup).
 - **The cover goes up before Amazon's screen is drawn.** Accessibility events report Amazon's home
   screen only as it is drawn, but the system log shows the Home button about a second earlier.
   `build-and-install.sh` grants the launcher `READ_LOGS` to watch for it; it reads only

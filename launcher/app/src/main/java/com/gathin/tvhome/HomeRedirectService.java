@@ -10,6 +10,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.provider.Settings;
 import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
@@ -25,6 +26,10 @@ import java.util.List;
  * home screen comes up, this launcher opens over it straight away. One exception: Amazon's home screen also
  * flashes up on the way into Settings, right after a window from Amazon's settings app, so a home screen that
  * follows a settings window within SETTINGS_GRACE_MS is left alone. Also opens the launcher once at boot.
+ *
+ * Fast path on Fire OS 7: click this launcher's own tile in Amazon's apps row. Amazon's home screen is then the
+ * app in front, which Android lets start activities at once, so the launcher opens in well under a second instead
+ * of after the 5 s hold below. Idea from github.com/andrewsaad/fire-tv-cleanup.
  *
  * Fire OS 7 (Android 9) differs in two ways. Settings is a tab of Amazon's home screen, so the home screen is left
  * alone while Amazon's settings cards are on it, and leaving that tab with Home only moves focus. And Android 9
@@ -53,6 +58,10 @@ public class HomeRedirectService extends AccessibilityService {
     private static final long FIRST_RETRY_MS = 3000;
     private static final long RETRY_INTERVAL_MS = 750;
     private static final long SETTINGS_CHECK_DELAY_MS = 400;
+    private static final long TILE_RETRY_EVERY_MS = 100;    // Amazon's window tree fills in over a few hundred ms
+    private static final long TILE_WAIT_MS = 1500;          // then fall back to starting the launcher directly
+    // Amazon sends its home window event twice, ~0.5 s apart, and late: an attempt already under way owns them.
+    private static final long ATTEMPT_MS = 3000;
     private static final long COVER_MAX_MS = 9000;          // retries and the cover stop after this
     private static final long COVER_HIDE_DELAY_MS = 150;    // lets the launcher draw its first frame first
 
@@ -67,6 +76,9 @@ public class HomeRedirectService extends AccessibilityService {
     private final Runnable redirect = this::launch;
     private final Runnable hideCover = this::hideCover;
     private final Runnable retry = this::retry;
+    private final Runnable clickTile = this::tryClickTile;
+    private long tileSearchStart;
+    private boolean attempting;   // a redirect is under way and our launcher hasn't shown yet
     private final Runnable checkLeftSettings = () -> {
         long now = SystemClock.uptimeMillis();
         if (!onAmazonHome || now - settingsSeenAt < SETTINGS_GRACE_MS || now - redirectedAt < APP_SWITCH_DELAY_MS) return;
@@ -79,9 +91,11 @@ public class HomeRedirectService extends AccessibilityService {
     protected void onServiceConnected() {
         prepareCover();
         // Home spotted in the system log: cover Amazon's home screen before it is even drawn.
+        // Home spotted in the system log, before Amazon's home screen is drawn: cover it and start looking for our
+        // tile straight away. A Home press is never the way into Settings, so the settings checks are skipped.
         homeLog = new HomeLogWatcher(this, AMAZON_LAUNCHER, () -> handler.post(() -> {
             Log.i(TAG, "Home pressed (log)");
-            showCover();
+            redirect(SystemClock.uptimeMillis());
         }));
         homeLog.start();
         if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS) openLauncher();
@@ -111,11 +125,18 @@ public class HomeRedirectService extends AccessibilityService {
         if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
         // Our own cover window is not a screen change; our activities are.
         if (getPackageName().contentEquals(pkg) && !cls.toString().endsWith("Activity")) return;
+        boolean amazonHome = AMAZON_LAUNCHER.contentEquals(pkg) && cls.toString().contains(AMAZON_HOME);
+        if (amazonHome && attempting && now - redirectedAt < ATTEMPT_MS) {
+            onAmazonHome = true;   // already on it: let the tile search run on
+            return;
+        }
+        attempting = false;
         for (String app : SETTINGS_APPS) if (pkg.toString().startsWith(app)) settingsSeenAt = now;
         handler.removeCallbacks(redirect);
         handler.removeCallbacks(retry);
+        handler.removeCallbacks(clickTile);
         handler.removeCallbacks(checkLeftSettings);
-        onAmazonHome = AMAZON_LAUNCHER.contentEquals(pkg) && cls.toString().contains(AMAZON_HOME);
+        onAmazonHome = amazonHome;
         if (!onAmazonHome) {
             handler.postDelayed(hideCover, COVER_HIDE_DELAY_MS);
             return;
@@ -140,8 +161,29 @@ public class HomeRedirectService extends AccessibilityService {
     public void onInterrupt() {
     }
 
+    /** While the cover is up, the D-pad and OK would act blindly on Amazon's home screen underneath: hold them. */
+    @Override
+    protected boolean onKeyEvent(KeyEvent event) {
+        if (!coverShown) return false;
+        switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                return true;
+            default:
+                return false;
+        }
+    }
+
     private void redirect(long now) {
         redirectedAt = now;
+        attempting = true;
+        handler.removeCallbacks(redirect);
+        handler.removeCallbacks(clickTile);
+        handler.removeCallbacks(retry);
         handler.post(redirect);
         handler.postDelayed(retry, FIRST_RETRY_MS);
     }
@@ -162,7 +204,44 @@ public class HomeRedirectService extends AccessibilityService {
 
     private void launch() {
         showCover();
+        tileSearchStart = SystemClock.uptimeMillis();
+        tryClickTile();
+    }
+
+    /** Clicks our tile on Amazon's home screen; retries for TILE_WAIT_MS, then starts the launcher directly. */
+    private void tryClickTile() {
+        if (!attempting) return;
+        if (clickOurTile()) {
+            Log.i(TAG, "clicked our tile");
+            return;
+        }
+        if (SystemClock.uptimeMillis() - tileSearchStart < TILE_WAIT_MS) {
+            handler.postDelayed(clickTile, TILE_RETRY_EVERY_MS);
+            return;
+        }
+        Log.i(TAG, "tile not found: starting directly");
         openLauncher();
+    }
+
+    /** Our tile in Amazon's apps row, matched by its exact label (Amazon's "Início" tab is not "Meu Início"). */
+    private boolean clickOurTile() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !AMAZON_LAUNCHER.contentEquals(root.getPackageName())) return false;
+        String label = getString(R.string.app_name).trim();
+        List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByText(label);
+        if (found == null) return false;
+        for (AccessibilityNodeInfo node : found) {
+            if (!label.equalsIgnoreCase(trimmed(node.getContentDescription()))
+                    && !label.equalsIgnoreCase(trimmed(node.getText()))) continue;
+            for (AccessibilityNodeInfo n = node; n != null; n = n.getParent()) {
+                if (n.isClickable()) return n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            }
+        }
+        return false;
+    }
+
+    private static String trimmed(CharSequence s) {
+        return s == null ? "" : s.toString().trim();
     }
 
     /** Amazon's home screen hidden under the launcher's background photo until the launcher shows. */
