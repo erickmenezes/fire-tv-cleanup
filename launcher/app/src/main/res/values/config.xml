@@ -22,6 +22,7 @@
         <item>com.amazon.smarthomemapviewapp</item>  <!-- Alexa Smart Home -->
         <item>com.amazon.spiderpork</item>   <!-- Luna -->
         <item>com.amazon.bueller.music</item>
+        <item>com.amazon.firetv.troubleshooting</item>   <!-- FireTV Troubleshooting, a diagnostics app -->
     </string-array>
 
     <!-- Show the Inputs button (HDMI ports, AV, Live TV). Turn off on a streaming stick or box, which has
@@ -30,6 +31,9 @@
 
     <!-- The TV's Live TV / tuner app, offered at the end of the Inputs menu. Leave empty to omit. -->
     <string name="live_tv_package" translatable="false">com.amazon.tv.livetv</string>
+
+    <!-- A soft glow in the colour of the focused dock app over the photo. Off keeps the photo's own colours. -->
+    <bool name="ambient_glow">false</bool>
 
     <!-- Tiles per row in the grid, and the most apps the dock can hold. -->
     <integer name="columns">5</integer>

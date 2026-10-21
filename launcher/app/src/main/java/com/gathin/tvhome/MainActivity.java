@@ -129,6 +129,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambientGlow.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         ambientGlow.setGradientCenter(0.32f, 0.42f);
         ambient.setBackground(ambientGlow);
+        if (!getResources().getBoolean(R.bool.ambient_glow)) ambient.setVisibility(View.GONE);
         ambient.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
                 ambientGlow.setGradientRadius((r - l) * 0.62f));
         greeting = findViewById(R.id.greeting);
