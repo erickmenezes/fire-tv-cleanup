@@ -4,6 +4,7 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.BitmapFactory;
 import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.Looper;
@@ -58,8 +59,11 @@ public class HomeRedirectService extends AccessibilityService {
     private long settingsSeenAt = -SETTINGS_GRACE_MS;
     private long redirectedAt = -APP_SWITCH_DELAY_MS;
     private boolean onAmazonHome;
-    private ImageView cover;
+    private ImageView cover;      // built once and kept, so showing it is only a window add
+    private boolean coverShown;
+    private int coverPhoto;
     private final Handler handler = new Handler(Looper.getMainLooper());
+    private HomeLogWatcher homeLog;
     private final Runnable redirect = this::launch;
     private final Runnable hideCover = this::hideCover;
     private final Runnable retry = this::retry;
@@ -73,17 +77,26 @@ public class HomeRedirectService extends AccessibilityService {
 
     @Override
     protected void onServiceConnected() {
+        prepareCover();
+        // Home spotted in the system log: cover Amazon's home screen before it is even drawn.
+        homeLog = new HomeLogWatcher(this, AMAZON_LAUNCHER, () -> handler.post(() -> {
+            Log.i(TAG, "Home pressed (log)");
+            showCover();
+        }));
+        homeLog.start();
         if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS) openLauncher();
     }
 
     @Override
     public void onDestroy() {
+        if (homeLog != null) homeLog.stop();
         hideCover();
         super.onDestroy();
     }
 
     @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
+        homeLog.start();   // READ_LOGS may be granted after the service started (first install)
         CharSequence pkg = event.getPackageName(), cls = event.getClassName();
         if (pkg == null || cls == null) return;
         long now = SystemClock.uptimeMillis();
@@ -111,8 +124,12 @@ public class HomeRedirectService extends AccessibilityService {
             Log.i(TAG, "home screen on the way into Settings: left alone");
             return;
         }
+        // Cover first: this event comes just before Amazon's home screen is drawn, and looking for the
+        // settings cards takes a few hundred ms on a stick.
+        showCover();
         if (showingSettings()) {
             Log.i(TAG, "back in Amazon's Settings tab: left alone");
+            hideCover();
             return;
         }
         Log.i(TAG, "home screen: opening launcher");
@@ -152,11 +169,8 @@ public class HomeRedirectService extends AccessibilityService {
     private void showCover() {
         handler.removeCallbacks(hideCover);
         handler.postDelayed(hideCover, COVER_MAX_MS);
-        if (cover != null) return;
-        cover = new ImageView(this);
-        cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
-        cover.setImageResource(MainActivity.background());
-        cover.setForeground(getDrawable(R.drawable.bg_scrim));   // same shading as the launcher's photo
+        if (coverShown) return;
+        prepareCover();
         WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
@@ -164,13 +178,31 @@ public class HomeRedirectService extends AccessibilityService {
                         | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_FULLSCREEN,
                 PixelFormat.OPAQUE);
         getSystemService(WindowManager.class).addView(cover, lp);
+        coverShown = true;
+        Log.i(TAG, "cover shown");
     }
 
     private void hideCover() {
         handler.removeCallbacks(hideCover);
-        if (cover == null) return;
+        if (!coverShown) return;
         getSystemService(WindowManager.class).removeView(cover);
-        cover = null;
+        coverShown = false;
+        prepareCover();   // a new time of day: decode the next photo now, not on the next Home
+    }
+
+    /** Builds the cover, or swaps its photo when the time of day changed. Half size: it sits under the scrim. */
+    private void prepareCover() {
+        if (cover == null) {
+            cover = new ImageView(this);
+            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            cover.setForeground(getDrawable(R.drawable.bg_scrim));   // same shading as the launcher's photo
+        }
+        int photo = MainActivity.background();
+        if (photo == coverPhoto) return;
+        BitmapFactory.Options half = new BitmapFactory.Options();
+        half.inSampleSize = 2;
+        cover.setImageBitmap(BitmapFactory.decodeResource(getResources(), photo, half));
+        coverPhoto = photo;
     }
 
     private void openLauncher() {

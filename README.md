@@ -134,9 +134,15 @@ things behave differently:
 
 - **Home takes about 5 seconds.** Android 9 holds back activity starts from background apps for
   5 s after Home, and only system callers skip that. The redirect retries until the launcher opens,
-  and meanwhile covers Amazon's home screen with the launcher's background photo, so Amazon's
-  screen only flashes for about a second. Fire OS offers no way around the wait: it doesn't pass
-  Home to accessibility services, and it refuses adb connections from apps on the device itself.
+  and meanwhile covers Amazon's home screen with the launcher's background photo. Fire OS offers no
+  way around the wait: it doesn't pass Home to accessibility services, and it refuses adb
+  connections from apps on the device itself.
+- **The cover goes up before Amazon's screen is drawn.** Accessibility events report Amazon's home
+  screen only as it is drawn, but the system log shows the Home button about a second earlier.
+  `build-and-install.sh` grants the launcher `READ_LOGS` to watch for it; it reads only
+  ActivityManager's lines, and costs about 2 MB and 0.1% of a core. To turn it off, run
+  `pm revoke com.gathin.tvhome android.permission.READ_LOGS`; the cover then follows the
+  accessibility event and Amazon's screen flashes briefly.
 - **Settings is a tab of Amazon's home screen.** The redirect leaves Amazon's home screen alone
   while its settings cards are on it, including when you come back from a settings page. Pressing
   Home there only moves focus to Amazon's home tab, so the redirect watches focus changes and the
