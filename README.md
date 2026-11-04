@@ -127,6 +127,37 @@ How it differs from Android TV:
 - **AirPlay has no screen of its own.** The AirPlay tile opens nothing, and casting from an iPhone
   works anyway.
 
+### Fire OS 7
+
+Also tested on a Fire TV Stick (Fire OS 7.7, Android 9, model AFTSS). The setup is the same; these
+things behave differently:
+
+- **Home takes about 2 seconds.** Android 9 holds back activity starts from background apps for
+  5 s after Home, but not starts by the app in front, which after Home is Amazon's launcher. So the
+  redirect clicks the launcher's own tile ("My Home", "Meu Início" in Portuguese) in Amazon's apps
+  row, and Amazon opens it. The tile has to be in that row: Apps → highlight My Home → Menu → Move
+  to front. Amazon only lists the launcher after a fresh install, so uninstall it first if it was
+  installed before this. Without the tile, the redirect starts the launcher itself after the 5 s.
+  Either way the launcher's background photo covers Amazon's screen, and the D-pad and OK are held
+  back meanwhile. Idea from [andrewsaad/fire-tv-cleanup](https://github.com/andrewsaad/fire-tv-cleanup).
+- **The cover goes up before Amazon's screen is drawn.** Accessibility events report Amazon's home
+  screen only as it is drawn, but the system log shows the Home button about a second earlier.
+  `build-and-install.sh` grants the launcher `READ_LOGS` to watch for it; it reads only
+  ActivityManager's lines, and costs about 2 MB and 0.1% of a core. To turn it off, run
+  `pm revoke com.gathin.tvhome android.permission.READ_LOGS`; the cover then follows the
+  accessibility event and Amazon's screen flashes briefly.
+- **Settings is a tab of Amazon's home screen.** The redirect leaves Amazon's home screen alone
+  while its settings cards are on it, including when you come back from a settings page. Pressing
+  Home there only moves focus to Amazon's home tab, so the redirect watches focus changes and the
+  settings cards to notice that you left.
+- **The launcher has its own Settings screen.** The Settings button opens a grid of cards. Network,
+  Applications, Bluetooth, My Fire TV and Accessibility open their Fire OS screens directly, without
+  Amazon's home screen. Display & Sounds, Preferences and Account need a permission only Amazon's
+  apps hold, so those cards open Amazon's settings grid. The last card switches the Home redirect.
+- **A stick has no inputs.** Set `show_inputs` to `false` in
+  [`config.xml`](launcher/app/src/main/res/values/config.xml) to hide the Inputs button.
+- **One more protected package.** Fire OS 7 also refuses to disable `com.amazon.device.logmanager`.
+
 ## Supported TVs
 
 Android TV and Google TV: Xiaomi/Redmi, TCL, Hisense, Sony, OnePlus, Realme, Nvidia Shield and most

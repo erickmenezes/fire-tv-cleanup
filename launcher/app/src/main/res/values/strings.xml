@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Home</string>
+    <string name="app_name">My Home</string>
     <string name="inputs">Inputs</string>
     <string name="wifi">Wi-Fi</string>
     <string name="settings">Settings</string>
@@ -29,4 +29,25 @@
     <string name="move_right">Move Right</string>
     <string name="app_info">App Info</string>
     <string name="dock_full">Dock is full. Unpin an app first.</string>
+    <string name="settings_eyebrow">Fire TV</string>
+    <string name="settings_title">Settings</string>
+    <string name="set_network">Network</string>
+    <string name="set_network_sub">Wi-Fi and Ethernet</string>
+    <string name="set_apps">Applications</string>
+    <string name="set_apps_sub">Manage installed apps</string>
+    <string name="set_remotes">Bluetooth</string>
+    <string name="set_remotes_sub">Remotes and accessories</string>
+    <string name="set_device">My Fire TV</string>
+    <string name="set_device_sub">About, updates, developer</string>
+    <string name="set_accessibility">Accessibility</string>
+    <string name="set_accessibility_sub">Captions, VoiceView</string>
+    <string name="set_display">Display &amp; Sounds</string>
+    <string name="set_display_sub">Via Amazon\'s screen</string>
+    <string name="set_preferences">Preferences</string>
+    <string name="set_preferences_sub">Via Amazon\'s screen</string>
+    <string name="set_account">Account</string>
+    <string name="set_account_sub">Via Amazon\'s screen</string>
+    <string name="set_home">Home screen</string>
+    <string name="set_home_on_sub">Now: this launcher</string>
+    <string name="set_home_off_sub">Now: Amazon\'s</string>
 </resources>

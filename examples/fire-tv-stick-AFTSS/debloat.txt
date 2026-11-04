@@ -1,0 +1,81 @@
+# Fire TV Stick (HDMI stick, not a TV) 3rd gen / Lite, model AFTSS (sheldon), Fire OS 7.7.1.7 / Android 9, build PS7717.5741N
+# Ads, telemetry, Alexa and unused Amazon apps. Packages are disabled for user 0, never uninstalled.
+# Kept on purpose: Prime Video (com.amazon.firebat), Appstore (com.amazon.venezia) for installing and
+# updating apps, the OTA service (it also updates Prime Video), screen mirroring and casting
+# (com.amazon.cast.sink, com.amazon.dialservice, whisperplay, awvflingreceiver), the remote and
+# Bluetooth, the keyboard, text-to-speech, and Amazon's launcher (Fire OS needs it).
+# Fire OS refuses this one as a protected package (SecurityException), so it is not listed:
+#   com.amazon.device.logmanager
+# Fire OS re-enables Alexa voice (com.amazon.vizzini) on every boot, so it is not listed either.
+# com.amazon.whad stays disabled but is a persistent process: it keeps running anyway.
+# Undo everything:
+#   TV_HOST=<ip> tools/restore.sh examples/fire-tv-stick-AFTSS/debloat.txt com.amazon.tv.launcher
+# Ads and recommendations
+com.amazon.hybridadidservice      # advertising ID used for ad targeting
+com.amazon.kso.blackbird          # sponsored screensaver and home-screen ads
+com.amazon.shoptv.client          # shopping upsell
+com.amazon.shoptv.firetv.client   # shopping upsell
+com.amazon.sneakpeek              # autoplaying trailers on the home screen
+com.amazon.media.recommendations  # recommendation rows
+com.amazon.tv.acr                 # automatic content recognition (what's on screen)
+# Telemetry
+com.amazon.wirelessmetrics.service
+com.amazon.tv.fw.metrics
+com.amazon.perfcollection
+com.amazon.dp.logger
+com.amazon.neo.minerva.logcat
+# Alexa
+com.amazon.vizzini.ftvcds
+com.amazon.alexamediaplayer.runtime.ftv
+com.amazon.alexa.externalmediaplayer.fireos
+com.amazon.alexadirectivebrokerservice
+com.amazon.firetv.androidskillconnectioncapability
+com.amazon.tv.alexaalerts
+com.amazon.tv.alexanotifications
+com.amazon.whad                   # Alexa multi-room audio
+com.amazon.whasettings
+com.amazon.wha.mediabrowserservice
+com.amazon.spotify.mediabrowserservice
+com.amazon.comms.starktachyon     # Alexa calling
+com.amazon.rtcsessioncontroller   # Alexa calling
+com.amazon.tv.matter              # Alexa smart home (Matter)
+com.amazon.tv.mattercohost
+# Unused Amazon apps
+com.amazon.cloud9                 # Silk browser
+com.amazon.bueller.music          # Amazon Music
+com.amazon.bueller.photos         # Amazon Photos
+com.amazon.gamehub                # games
+com.amazon.minitv.android.app     # Amazon miniTV
+com.amazon.storm.lightning.tutorial
+com.amazon.tmm.tutorial
+com.amazon.tv.releasenotes
+# From examples/amazon-fire-tv-stick-lite-2020 in Gathin23/cleanyourtv (same model and build).
+# More telemetry and data collection
+com.amazon.ceviche                         # data collection pipelines
+com.amazon.neo.minerva
+com.amazon.client.metrics.api
+com.amazon.perfc
+com.amazon.livedeviceservice
+com.amazon.privacypassservice              # privacy pass token service
+com.amazon.tv.developer.dataservice        # content personalization data for third-party apps
+com.amazon.wifilocker                      # uploads Wi-Fi passwords to Amazon
+# More promos and notices
+com.amazon.systemnotices
+com.amazon.hedwig                          # Fire TV Channels
+com.amazon.providers.contentsupport
+com.amazon.tv.easyupgrade                  # "upgrade your Fire TV" promos
+com.amazon.uxnotification                  # UX notification popups
+# More Alexa
+com.amazon.aca                             # Alexa hints and cues
+com.amazon.aiondec                         # Alexa skill connections
+com.amazon.audiohome                       # Alexa Home Theater
+# Setup helpers and unused Amazon apps
+com.amazon.tv.ffsprovisioneeclient         # frustration-free setup
+com.amazon.whisperjoin.middleware.np       # frustration-free setup of other Amazon devices
+com.amazon.ods.kindleconnect               # "show on Fire TV" from Echo or Fire tablet
+com.amazon.naatyam
+com.amazon.tv.website_launcher             # opens websites in Silk
+com.amazon.tahoe                           # Amazon Kids
+# Live TV: a stick has no tuner; Globoplay's live channels play inside its own app
+com.amazon.tv.livetv                       # Live tab and guide
+com.amazon.franktvinput                    # live TV input feeding the Live tab

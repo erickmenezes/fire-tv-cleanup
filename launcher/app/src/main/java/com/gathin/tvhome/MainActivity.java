@@ -129,6 +129,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambientGlow.setGradientType(GradientDrawable.RADIAL_GRADIENT);
         ambientGlow.setGradientCenter(0.32f, 0.42f);
         ambient.setBackground(ambientGlow);
+        if (!getResources().getBoolean(R.bool.ambient_glow)) ambient.setVisibility(View.GONE);
         ambient.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
                 ambientGlow.setGradientRadius((r - l) * 0.62f));
         greeting = findViewById(R.id.greeting);
@@ -185,9 +186,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
         View btnInputs = findViewById(R.id.btnInputs);
         View btnSettings = findViewById(R.id.btnSettings);
+        boolean showInputs = getResources().getBoolean(R.bool.show_inputs);
+        if (!showInputs) btnInputs.setVisibility(View.GONE);
+        // The leftmost pill: Left stops there instead of falling through to a tile.
+        int firstPill = showInputs ? R.id.btnInputs : R.id.btnWifi;
         btnInputs.setOnClickListener(v -> showInputs());
         btnWifi.setOnClickListener(v -> open(new Intent(Settings.ACTION_WIFI_SETTINGS)));
-        btnSettings.setOnClickListener(v -> open(new Intent(Settings.ACTION_SETTINGS)));
+        btnSettings.setOnClickListener(v -> startActivity(new Intent(this, SettingsActivity.class)));
         btnSettings.setOnLongClickListener(v -> {
             showHomeScreenMenu(v);
             return true;
@@ -202,7 +207,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 showHomeScreenMenu(v);
                 return true;
             }
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v.getId() == R.id.btnInputs) return true;
+            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && v.getId() == firstPill) return true;
             return keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && v.getId() == R.id.btnSettings;
         };
         btnInputs.setOnKeyListener(pillKeys);
@@ -219,9 +224,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         });
     }
 
+    /** True while this launcher is in the foreground; read by HomeRedirectService to retry a deferred start. */
+    static volatile boolean showing;
+
     @Override
     protected void onResume() {
         super.onResume();
+        showing = true;
         glassShown = false;
         glass.setAlpha(0f);
         heroShown = false;
@@ -248,6 +257,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onPause() {
         super.onPause();
+        showing = false;
         handler.removeCallbacks(minuteTick);
         ConnectivityManager cm = getSystemService(ConnectivityManager.class);
         if (cm != null) cm.unregisterNetworkCallback(networkCallback);
@@ -567,6 +577,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         return 3;
     }
 
+    /** The background photo for the time of day; also used by HomeRedirectService's cover. */
+    static int background() {
+        return BACKGROUNDS[dayPart()];
+    }
+
     private void updateGreeting() {
         String text = getString(GREETINGS[dayPart()]);
         String name = getString(R.string.user_name).trim();
@@ -574,7 +589,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     }
 
     private void updateBackground() {
-        int res = BACKGROUNDS[dayPart()];
+        int res = background();
         if (res == bgRes) return;
         boolean first = bgRes == 0;
         bgRes = res;

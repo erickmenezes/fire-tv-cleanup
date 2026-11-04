@@ -19,5 +19,9 @@ launcher/app/src/main/res/drawable-nodpi/dock_youtube.png
 launcher/app/src/main/res/drawable-nodpi/dock_netflix.png
 launcher/app/src/main/res/drawable-nodpi/dock_prime.png
 launcher/app/src/main/res/drawable-nodpi/dock_airplay.png
+launcher/app/src/main/res/drawable-nodpi/dock_stremio.png
+launcher/app/src/main/res/drawable-nodpi/dock_hbo.png
+launcher/app/src/main/res/drawable-nodpi/dock_globoplay.png
+tools/iconvenv/
 tools/assets/
 screenshots/

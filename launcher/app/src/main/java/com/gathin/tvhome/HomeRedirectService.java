@@ -4,12 +4,20 @@ import android.accessibilityservice.AccessibilityService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.BitmapFactory;
+import android.graphics.PixelFormat;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import android.view.KeyEvent;
 import android.provider.Settings;
+import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.widget.ImageView;
+
+import java.util.List;
 
 /**
  * Makes this launcher the home screen on Fire OS, which ignores the default-home setting.
@@ -18,6 +26,16 @@ import android.view.accessibility.AccessibilityEvent;
  * home screen comes up, this launcher opens over it straight away. One exception: Amazon's home screen also
  * flashes up on the way into Settings, right after a window from Amazon's settings app, so a home screen that
  * follows a settings window within SETTINGS_GRACE_MS is left alone. Also opens the launcher once at boot.
+ *
+ * Fast path on Fire OS 7: click this launcher's own tile in Amazon's apps row. Amazon's home screen is then the
+ * app in front, which Android lets start activities at once, so the launcher opens in well under a second instead
+ * of after the 5 s hold below. Idea from github.com/andrewsaad/fire-tv-cleanup.
+ *
+ * Fire OS 7 (Android 9) differs in two ways. Settings is a tab of Amazon's home screen, so the home screen is left
+ * alone while Amazon's settings cards are on it, and leaving that tab with Home only moves focus. And Android 9
+ * holds back starts from background apps for 5 s after Home, so a start that didn't land is retried after that.
+ * Only system callers skip that hold (Fire OS also refuses adb connections from apps on the device), so while the
+ * launcher is on its way, a cover with its background photo hides Amazon's home screen.
  *
  * Turned on and off from the launcher (Menu on the Settings button) when the app holds WRITE_SECURE_SETTINGS
  * (granted over adb: pm grant com.gathin.tvhome android.permission.WRITE_SECURE_SETTINGS), or over adb:
@@ -32,35 +50,238 @@ public class HomeRedirectService extends AccessibilityService {
     private static final String[] SETTINGS_APPS = {"com.amazon.tv.settings", "com.amazon.tv.quicksettings"};
     private static final long SETTINGS_GRACE_MS = 2000;     // measured: settings window -> home flash ~200 ms
     private static final long BOOT_WINDOW_MS = 3 * 60_000;  // service connecting this soon after boot = boot
+    // Fire OS 7 shows Settings as a tab of Amazon's home screen; these cards are only there on that tab.
+    private static final String SETTINGS_CARD = "com.amazon.tv.launcher:id/settings_card_view";
+    // Android 9 holds back activity starts from background apps for 5 s after Home. The window event comes 1-2 s
+    // after Home, so starts are retried from FIRST_RETRY_MS after it until one lands.
+    private static final long APP_SWITCH_DELAY_MS = 5500;
+    private static final long FIRST_RETRY_MS = 3000;
+    private static final long RETRY_INTERVAL_MS = 750;
+    private static final long SETTINGS_CHECK_DELAY_MS = 400;
+    private static final long TILE_RETRY_EVERY_MS = 100;    // Amazon's window tree fills in over a few hundred ms
+    private static final long TILE_WAIT_MS = 1500;          // then fall back to starting the launcher directly
+    // Amazon sends its home window event twice, ~0.5 s apart, and late: an attempt already under way owns them.
+    private static final long ATTEMPT_MS = 3000;
+    private static final long COVER_MAX_MS = 9000;          // retries and the cover stop after this
+    private static final long COVER_HIDE_DELAY_MS = 150;    // lets the launcher draw its first frame first
 
-    private final Handler handler = new Handler(Looper.getMainLooper());
-    private final Runnable redirect = this::openLauncher;
     private long settingsSeenAt = -SETTINGS_GRACE_MS;
+    private long redirectedAt = -APP_SWITCH_DELAY_MS;
+    private boolean onAmazonHome;
+    private ImageView cover;      // built once and kept, so showing it is only a window add
+    private boolean coverShown;
+    private int coverPhoto;
+    private final Handler handler = new Handler(Looper.getMainLooper());
+    private HomeLogWatcher homeLog;
+    private final Runnable redirect = this::launch;
+    private final Runnable hideCover = this::hideCover;
+    private final Runnable retry = this::retry;
+    private final Runnable clickTile = this::tryClickTile;
+    private long tileSearchStart;
+    private boolean attempting;   // a redirect is under way and our launcher hasn't shown yet
+    private final Runnable checkLeftSettings = () -> {
+        long now = SystemClock.uptimeMillis();
+        if (!onAmazonHome || now - settingsSeenAt < SETTINGS_GRACE_MS || now - redirectedAt < APP_SWITCH_DELAY_MS) return;
+        if (showingSettings()) return;
+        Log.i(TAG, "left Amazon's Settings tab: opening launcher");
+        redirect(now);
+    };
 
     @Override
     protected void onServiceConnected() {
+        prepareCover();
+        // Home spotted in the system log: cover Amazon's home screen before it is even drawn.
+        // Home spotted in the system log, before Amazon's home screen is drawn: cover it and start looking for our
+        // tile straight away. A Home press is never the way into Settings, so the settings checks are skipped.
+        homeLog = new HomeLogWatcher(this, AMAZON_LAUNCHER, () -> handler.post(() -> {
+            Log.i(TAG, "Home pressed (log)");
+            redirect(SystemClock.uptimeMillis());
+        }));
+        homeLog.start();
         if (SystemClock.elapsedRealtime() < BOOT_WINDOW_MS) openLauncher();
     }
 
     @Override
+    public void onDestroy() {
+        if (homeLog != null) homeLog.stop();
+        hideCover();
+        super.onDestroy();
+    }
+
+    @Override
     public void onAccessibilityEvent(AccessibilityEvent event) {
-        if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        homeLog.start();   // READ_LOGS may be granted after the service started (first install)
         CharSequence pkg = event.getPackageName(), cls = event.getClassName();
         if (pkg == null || cls == null) return;
         long now = SystemClock.uptimeMillis();
+        if (event.getEventType() == AccessibilityEvent.TYPE_VIEW_FOCUSED) {
+            // On Fire OS 7, Home pressed in Amazon's Settings tab only moves focus to the home tab: no new window.
+            // The focus moves before the settings cards are removed, so look a moment later.
+            if (!onAmazonHome || !AMAZON_LAUNCHER.contentEquals(pkg)) return;
+            handler.removeCallbacks(checkLeftSettings);
+            handler.postDelayed(checkLeftSettings, SETTINGS_CHECK_DELAY_MS);
+            return;
+        }
+        if (event.getEventType() != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return;
+        // Our own cover window is not a screen change; our activities are.
+        if (getPackageName().contentEquals(pkg) && !cls.toString().endsWith("Activity")) return;
+        boolean amazonHome = AMAZON_LAUNCHER.contentEquals(pkg) && cls.toString().contains(AMAZON_HOME);
+        if (amazonHome && attempting && now - redirectedAt < ATTEMPT_MS) {
+            onAmazonHome = true;   // already on it: let the tile search run on
+            return;
+        }
+        attempting = false;
         for (String app : SETTINGS_APPS) if (pkg.toString().startsWith(app)) settingsSeenAt = now;
         handler.removeCallbacks(redirect);
-        if (!AMAZON_LAUNCHER.contentEquals(pkg) || !cls.toString().contains(AMAZON_HOME)) return;
+        handler.removeCallbacks(retry);
+        handler.removeCallbacks(clickTile);
+        handler.removeCallbacks(checkLeftSettings);
+        onAmazonHome = amazonHome;
+        if (!onAmazonHome) {
+            handler.postDelayed(hideCover, COVER_HIDE_DELAY_MS);
+            return;
+        }
         if (now - settingsSeenAt < SETTINGS_GRACE_MS) {
             Log.i(TAG, "home screen on the way into Settings: left alone");
             return;
         }
+        // Cover first: this event comes just before Amazon's home screen is drawn, and looking for the
+        // settings cards takes a few hundred ms on a stick.
+        showCover();
+        if (showingSettings()) {
+            Log.i(TAG, "back in Amazon's Settings tab: left alone");
+            hideCover();
+            return;
+        }
         Log.i(TAG, "home screen: opening launcher");
-        handler.post(redirect);
+        redirect(now);
     }
 
     @Override
     public void onInterrupt() {
+    }
+
+    /** While the cover is up, the D-pad and OK would act blindly on Amazon's home screen underneath: hold them. */
+    @Override
+    protected boolean onKeyEvent(KeyEvent event) {
+        if (!coverShown) return false;
+        switch (event.getKeyCode()) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+            case KeyEvent.KEYCODE_DPAD_CENTER:
+            case KeyEvent.KEYCODE_ENTER:
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    private void redirect(long now) {
+        redirectedAt = now;
+        attempting = true;
+        handler.removeCallbacks(redirect);
+        handler.removeCallbacks(clickTile);
+        handler.removeCallbacks(retry);
+        handler.post(redirect);
+        handler.postDelayed(retry, FIRST_RETRY_MS);
+    }
+
+    private boolean showingSettings() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null) return false;
+        List<AccessibilityNodeInfo> cards = root.findAccessibilityNodeInfosByViewId(SETTINGS_CARD);
+        return cards != null && !cards.isEmpty();
+    }
+
+    private void retry() {
+        if (!onAmazonHome || MainActivity.showing) return;
+        Log.i(TAG, "launcher start was held back: retrying");
+        openLauncher();
+        if (SystemClock.uptimeMillis() - redirectedAt < COVER_MAX_MS) handler.postDelayed(retry, RETRY_INTERVAL_MS);
+    }
+
+    private void launch() {
+        showCover();
+        tileSearchStart = SystemClock.uptimeMillis();
+        tryClickTile();
+    }
+
+    /** Clicks our tile on Amazon's home screen; retries for TILE_WAIT_MS, then starts the launcher directly. */
+    private void tryClickTile() {
+        if (!attempting) return;
+        if (clickOurTile()) {
+            Log.i(TAG, "clicked our tile");
+            return;
+        }
+        if (SystemClock.uptimeMillis() - tileSearchStart < TILE_WAIT_MS) {
+            handler.postDelayed(clickTile, TILE_RETRY_EVERY_MS);
+            return;
+        }
+        Log.i(TAG, "tile not found: starting directly");
+        openLauncher();
+    }
+
+    /** Our tile in Amazon's apps row, matched by its exact label (Amazon's "Início" tab is not "Meu Início"). */
+    private boolean clickOurTile() {
+        AccessibilityNodeInfo root = getRootInActiveWindow();
+        if (root == null || !AMAZON_LAUNCHER.contentEquals(root.getPackageName())) return false;
+        String label = getString(R.string.app_name).trim();
+        List<AccessibilityNodeInfo> found = root.findAccessibilityNodeInfosByText(label);
+        if (found == null) return false;
+        for (AccessibilityNodeInfo node : found) {
+            if (!label.equalsIgnoreCase(trimmed(node.getContentDescription()))
+                    && !label.equalsIgnoreCase(trimmed(node.getText()))) continue;
+            for (AccessibilityNodeInfo n = node; n != null; n = n.getParent()) {
+                if (n.isClickable()) return n.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            }
+        }
+        return false;
+    }
+
+    private static String trimmed(CharSequence s) {
+        return s == null ? "" : s.toString().trim();
+    }
+
+    /** Amazon's home screen hidden under the launcher's background photo until the launcher shows. */
+    private void showCover() {
+        handler.removeCallbacks(hideCover);
+        handler.postDelayed(hideCover, COVER_MAX_MS);
+        if (coverShown) return;
+        prepareCover();
+        WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                        | WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN | WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                PixelFormat.OPAQUE);
+        getSystemService(WindowManager.class).addView(cover, lp);
+        coverShown = true;
+        Log.i(TAG, "cover shown");
+    }
+
+    private void hideCover() {
+        handler.removeCallbacks(hideCover);
+        if (!coverShown) return;
+        getSystemService(WindowManager.class).removeView(cover);
+        coverShown = false;
+        prepareCover();   // a new time of day: decode the next photo now, not on the next Home
+    }
+
+    /** Builds the cover, or swaps its photo when the time of day changed. Half size: it sits under the scrim. */
+    private void prepareCover() {
+        if (cover == null) {
+            cover = new ImageView(this);
+            cover.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            cover.setForeground(getDrawable(R.drawable.bg_scrim));   // same shading as the launcher's photo
+        }
+        int photo = MainActivity.background();
+        if (photo == coverPhoto) return;
+        BitmapFactory.Options half = new BitmapFactory.Options();
+        half.inSampleSize = 2;
+        cover.setImageBitmap(BitmapFactory.decodeResource(getResources(), photo, half));
+        coverPhoto = photo;
     }
 
     private void openLauncher() {
